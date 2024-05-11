@@ -134,8 +134,8 @@ with tab1:
     st.markdown('<div class="subtitle">Identifying High-Risk Customers</div>', unsafe_allow_html=True)
     
     # Categorize customers based on cash advance frequency and balance
-    data['HIGH_RISK_CASH_ADVANCE'] = pd.cut(data['CASH_ADVANCE_FREQUENCY'], bins=[0, 0.1, 0.5, data['CASH_ADVANCE_FREQUENCY'].max()], labels=['Low', 'Medium', 'High'])
-    data['HIGH_RISK_BALANCE'] = pd.cut(data['BALANCE'], bins=[0, 1000, 3000, data['BALANCE'].max()], labels=['Low', 'Medium', 'High'])
+    data['HIGH_RISK_CASH_ADVANCE'] = pd.cut(data['CASH_ADVANCE_FREQUENCY'], bins=[-np.inf, 0.1, 0.5, data['CASH_ADVANCE_FREQUENCY'].max()], labels=['Low', 'Medium', 'High'])
+    data['HIGH_RISK_BALANCE'] = pd.cut(data['BALANCE'], bins=[-np.inf, 1000, 3000, data['BALANCE'].max()], labels=['Low', 'Medium', 'High'])
     
     # Group data to see average cash advance and balance in each category
     risk_group = data.groupby(['HIGH_RISK_CASH_ADVANCE', 'HIGH_RISK_BALANCE']).agg({
@@ -184,11 +184,19 @@ with tab1:
     st.pyplot(fig)
     
     # Calculate risk score
+    data['BALANCE_NORM'] = (data['BALANCE'] - data['BALANCE'].min()) / (data['BALANCE'].max() - data['BALANCE'].min())
+    data['CASH_ADVANCE_FREQ_NORM'] = (data['CASH_ADVANCE_FREQUENCY'] - data['CASH_ADVANCE_FREQUENCY'].min()) / (data['CASH_ADVANCE_FREQUENCY'].max() - data['CASH_ADVANCE_FREQUENCY'].min())
+    data['FULL_PAYMENT_NORM'] = (data['PRC_FULL_PAYMENT'] - data['PRC_FULL_PAYMENT'].min()) / (data['PRC_FULL_PAYMENT'].max() - data['PRC_FULL_PAYMENT'].min())
+
+    # Calculate the risk score by adding the normalized values, considering to invert the full payment norm to reflect risk properly (higher scores indicate lower payments)
     data['RISK_SCORE'] = (
-        0.5 * pd.cut(data['BALANCE'], bins=3, labels=False) +
-        0.3 * pd.cut(data['CASH_ADVANCE_FREQUENCY'], bins=3, labels=False) +
-        0.2 * (1 - pd.cut(data['PRC_FULL_PAYMENT'], bins=3, labels=False))
+        0.5 * data['BALANCE_NORM'] +
+        0.3 * data['CASH_ADVANCE_FREQ_NORM'] +
+        0.2 * (1 - data['FULL_PAYMENT_NORM'])  # Inverting the full payment contribution to risk
     )
+
+    # Ensuring the risk score does not go below zero
+    data['RISK_SCORE'] = data['RISK_SCORE'].clip(lower=0)
     
     # Visualize the distribution of the risk score
     fig, ax = plt.subplots(figsize=(10, 6))
